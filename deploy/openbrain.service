@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenBrain — Telegram Claude Code Assistant Bot
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+Group=YOUR_USERNAME
+WorkingDirectory=/path/to/openbrain
+ExecStart=/path/to/openbrain/.venv/bin/python -m tg_assistant
+Restart=always
+RestartSec=10
+EnvironmentFile=/path/to/openbrain/.env
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openbrain
+
+[Install]
+WantedBy=multi-user.target
