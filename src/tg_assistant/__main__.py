@@ -11,7 +11,7 @@ def main() -> None:
     app = create_application(config)
     app.run_polling(
         drop_pending_updates=True,
-        allowed_updates=["message", "edited_message"],
+        allowed_updates=["message", "edited_message", "callback_query"],
     )
 
 

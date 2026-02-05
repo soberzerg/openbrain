@@ -9,6 +9,7 @@ import pytest
 
 from tg_assistant.config import Config
 from tg_assistant.models.database import Database
+from tg_assistant.services.rate_limiter import RateLimiter
 
 
 @pytest.fixture
@@ -53,3 +54,9 @@ def mock_cli() -> AsyncMock:
         num_turns=1,
     )
     return cli
+
+
+@pytest.fixture
+def rate_limiter() -> RateLimiter:
+    """Create a rate limiter for testing."""
+    return RateLimiter(max_per_minute=10)

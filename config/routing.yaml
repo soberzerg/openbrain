@@ -1,0 +1,101 @@
+# Content routing configuration for TG Assistant v2
+# Maps content types to default actions and follow-up buttons.
+
+content_routing:
+  youtube:
+    patterns:
+      - 'youtube\.com/watch'
+      - 'youtu\.be/'
+      - 'youtube\.com/shorts/'
+    default_action: save_to_inbox
+    follow_up:
+      - label: "🎬 YouTube саммари"
+        action: call_skill
+        skill: youtube-summary
+      - label: "📋 Создать задачу"
+        action: create_task
+      - label: "📁 В проект..."
+        action: select_project
+
+  github:
+    patterns:
+      - 'github\.com/'
+    default_action: save_to_inbox
+    follow_up:
+      - label: "🔍 Проанализировать"
+        action: call_claude
+        prompt: "Analyze this GitHub repository: {url}"
+      - label: "📋 Создать задачу"
+        action: create_task
+
+  article:
+    patterns:
+      - 'https?://'
+    exclude_patterns:
+      - 'youtube\.com'
+      - 'youtu\.be'
+      - 'github\.com'
+      - 't\.me'
+    default_action: save_to_inbox
+    follow_up:
+      - label: "📝 Полный саммари"
+        action: call_claude
+        prompt: "Summarize this article: {url}"
+      - label: "📋 Создать задачу"
+        action: create_task
+      - label: "📁 В проект..."
+        action: select_project
+
+  forwarded:
+    trigger: is_forwarded
+    default_action: save_to_inbox
+    follow_up:
+      - label: "📋 Создать задачу"
+        action: create_task
+      - label: "📇 Извлечь контакты"
+        action: call_claude
+        prompt: "Extract contact information from: {content}"
+      - label: "📁 В проект..."
+        action: select_project
+
+  voice:
+    trigger: has_voice
+    default_action: transcribe_and_save
+    follow_up:
+      - label: "📋 Создать задачу"
+        action: create_task
+      - label: "📝 В заметку"
+        action: save_as_note
+      - label: "🧠 Брейншторм"
+        action: call_claude
+        prompt: "Brainstorm ideas based on: {content}"
+
+  photo:
+    trigger: has_photo
+    default_action: save_to_inbox
+    follow_up:
+      - label: "📝 В заметку с описанием"
+        action: call_claude
+        prompt: "Describe this image and save as a note"
+      - label: "🔤 OCR текста"
+        action: call_claude
+        prompt: "Extract all text from this image (OCR)"
+
+  document:
+    trigger: has_document
+    default_action: save_to_inbox
+    follow_up:
+      - label: "📝 Проанализировать"
+        action: call_claude
+        prompt: "Analyze this document: {filename}"
+      - label: "📋 Создать задачу"
+        action: create_task
+
+  text_command:
+    keywords:
+      - pattern: '(?i)(задач|task)'
+        action: create_task
+      - pattern: '(?i)(запиши|запомни|сохрани|note|save)'
+        action: save_to_inbox
+      - pattern: '(?i)(напомни|remind)'
+        action: create_reminder
