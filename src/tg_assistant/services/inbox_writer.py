@@ -55,6 +55,9 @@ class InboxWriter:
         """Save content as a markdown file in the inbox.
 
         Returns the path of the created file.
+
+        Raises:
+            ValueError: If the resolved path is outside the inbox directory.
         """
         now = datetime.now()
         date_str = now.strftime("%Y-%m-%d")
@@ -71,6 +74,15 @@ class InboxWriter:
             ts = now.strftime("%H%M%S")
             filename = f"{date_str}_{slug}_{ts}.md"
             filepath = self._inbox / filename
+
+        # Security: validate the resolved path is within inbox
+        try:
+            resolved = filepath.resolve()
+            inbox_resolved = self._inbox.resolve()
+            if not str(resolved).startswith(str(inbox_resolved)):
+                raise ValueError(f"Path traversal attempt detected: {filepath}")
+        except (OSError, RuntimeError) as e:
+            raise ValueError(f"Invalid file path: {e}") from e
 
         # Build markdown with YAML frontmatter
         frontmatter_lines = [

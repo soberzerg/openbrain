@@ -24,7 +24,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = update.effective_user.id
     message_text = update.effective_message.text or ""
 
-    if not rate_limiter.check(user_id):
+    if not await rate_limiter.check(user_id):
         await update.effective_message.reply_text(
             "Too many messages. Please wait a moment."
         )

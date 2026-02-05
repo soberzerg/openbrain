@@ -32,7 +32,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not voice:
         return
 
-    if not rate_limiter.check(user_id):
+    if not await rate_limiter.check(user_id):
         await update.effective_message.reply_text(
             "Too many messages. Please wait a moment."
         )
@@ -104,7 +104,7 @@ async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not video_note:
         return
 
-    if not rate_limiter.check(user_id):
+    if not await rate_limiter.check(user_id):
         await update.effective_message.reply_text(
             "Too many messages. Please wait a moment."
         )

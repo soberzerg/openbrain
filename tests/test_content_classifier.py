@@ -6,7 +6,6 @@ import pytest
 import yaml
 
 from tg_assistant.services.content_classifier import (
-    ClassificationResult,
     ContentClassifier,
     ContentType,
 )

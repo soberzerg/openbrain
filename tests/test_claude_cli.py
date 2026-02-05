@@ -61,7 +61,7 @@ class TestClaudeCliSend:
         """CLI is called with -r for resumed sessions."""
         process = _make_process(GOOD_RESPONSE)
         with patch("asyncio.create_subprocess_exec", return_value=process) as mock_exec:
-            result = await cli.send("Hello", session_id="abc-123", is_resume=True)
+            await cli.send("Hello", session_id="abc-123", is_resume=True)
 
             cmd_args = mock_exec.call_args[0]
             assert "-r" in cmd_args

@@ -12,8 +12,12 @@ from telegram.ext import ContextTypes
 from tg_assistant.config import Config
 from tg_assistant.handlers._helpers import send_claude_response
 from tg_assistant.models.database import Database
-from tg_assistant.services.action_router import ActionRouter, FollowUpAction
-from tg_assistant.services.content_classifier import ClassificationResult, ContentClassifier, ContentType
+from tg_assistant.services.action_router import ActionRouter, RouteResult
+from tg_assistant.services.content_classifier import (
+    ClassificationResult,
+    ContentClassifier,
+    ContentType,
+)
 from tg_assistant.services.inbox_writer import InboxWriter
 from tg_assistant.services.rate_limiter import RateLimiter
 from tg_assistant.services.transcription import TranscriptionError, TranscriptionService
@@ -36,7 +40,7 @@ async def handle_routed_message(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = update.effective_user.id
     msg = update.effective_message
 
-    if not rate_limiter.check(user_id):
+    if not await rate_limiter.check(user_id):
         await msg.reply_text("Too many messages. Please wait a moment.")
         return
 
@@ -89,12 +93,11 @@ async def _handle_save_to_inbox(
     context: ContextTypes.DEFAULT_TYPE,
     user_id: int,
     classification: ClassificationResult,
-    route: "RouteResult",
+    route: RouteResult,
 ) -> None:
     """Save content to Obsidian inbox and offer follow-up buttons."""
     inbox_writer: InboxWriter | None = context.bot_data.get("inbox_writer")
     db: Database = context.bot_data["db"]
-    config: Config = context.bot_data["config"]
     msg = update.effective_message
 
     content_type = classification.content_type
@@ -141,10 +144,9 @@ async def _handle_transcribe_and_save(
     context: ContextTypes.DEFAULT_TYPE,
     user_id: int,
     classification: ClassificationResult,
-    route: "RouteResult",
+    route: RouteResult,
 ) -> None:
     """Transcribe voice/video, save to inbox, offer follow-ups."""
-    config: Config = context.bot_data["config"]
     db: Database = context.bot_data["db"]
     transcription: TranscriptionService | None = context.bot_data.get("transcription")
     inbox_writer: InboxWriter | None = context.bot_data.get("inbox_writer")
@@ -211,7 +213,7 @@ async def _handle_keyword_action(
     context: ContextTypes.DEFAULT_TYPE,
     user_id: int,
     classification: ClassificationResult,
-    route: "RouteResult",
+    route: RouteResult,
 ) -> None:
     """Handle text with keyword-detected action (create_task, etc.) — send to Claude."""
     text = classification.metadata.get("text", update.effective_message.text or "")
@@ -232,7 +234,7 @@ async def _send_with_follow_ups(
     user_id: int,
     reply_text: str,
     classification: ClassificationResult,
-    route: "RouteResult",
+    route: RouteResult,
     extra_params: dict | None = None,
 ) -> None:
     """Send a reply with inline follow-up buttons."""
@@ -339,7 +341,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 content_type=cb["content_type"],
             )
             try:
-                await query.edit_message_text(f"📝 Сохранено как заметка: <code>{saved.name}</code>", parse_mode="HTML")
+                msg_text = f"📝 Сохранено как заметка: <code>{saved.name}</code>"
+                await query.edit_message_text(msg_text, parse_mode="HTML")
             except Exception:
                 await query.edit_message_text(f"📝 Сохранено как заметка: {saved.name}")
         else:
@@ -384,9 +387,7 @@ async def _collect_content(
     classification: ClassificationResult,
 ) -> tuple[str, str | None]:
     """Collect text content and download media. Returns (content, file_path)."""
-    config: Config = context.bot_data["config"]
     msg = update.effective_message
-    user_id = update.effective_user.id
     content_parts: list[str] = []
     file_path: str | None = None
 
@@ -463,7 +464,8 @@ async def _download_document(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return None
 
     if doc.file_size and doc.file_size > MAX_FILE_SIZE:
-        await msg.reply_text(f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)} MB.")
+        max_mb = MAX_FILE_SIZE // (1024 * 1024)
+        await msg.reply_text(f"File too large. Maximum size is {max_mb} MB.")
         return None
 
     tg_file = await context.bot.get_file(doc.file_id)
