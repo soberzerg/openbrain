@@ -76,6 +76,10 @@ class Database:
         """Open connection and create tables."""
         self._db = await aiosqlite.connect(str(self.db_path))
         self._db.row_factory = aiosqlite.Row
+
+        # Enable WAL mode for better concurrent access
+        await self._db.execute("PRAGMA journal_mode=WAL")
+
         await self._db.executescript(SCHEMA_SQL)
         await self._db.commit()
         logger.info("Database initialized at %s", self.db_path)
@@ -130,24 +134,26 @@ class Database:
     ) -> None:
         """Update session metadata."""
         assert self._db
+
+        # Build update clause with whitelisted columns only
         updates: list[str] = ["last_active = datetime('now')"]
         params: list[Any] = []
 
-        if status is not None:
-            updates.append("status = ?")
-            params.append(status)
-        if message_count is not None:
-            updates.append("message_count = ?")
-            params.append(message_count)
-        if total_cost is not None:
-            updates.append("total_cost = ?")
-            params.append(total_cost)
+        # Whitelist of allowed column names
+        allowed_updates = {
+            "status": status,
+            "message_count": message_count,
+            "total_cost": total_cost,
+        }
+
+        for column_name, value in allowed_updates.items():
+            if value is not None:
+                updates.append(f"{column_name} = ?")
+                params.append(value)
 
         params.append(session_id)
-        await self._db.execute(
-            f"UPDATE sessions SET {', '.join(updates)} WHERE session_id = ?",
-            params,
-        )
+        query = f"UPDATE sessions SET {', '.join(updates)} WHERE session_id = ?"
+        await self._db.execute(query, params)
         await self._db.commit()
 
     async def log_message(

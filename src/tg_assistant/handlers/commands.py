@@ -94,7 +94,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         lines.append("No active session. Send a message to start one.")
 
     lines.append("")
-    lines.append(f"<b>Total stats:</b>")
+    lines.append("<b>Total stats:</b>")
     lines.append(f"Sessions: {stats['total_sessions']}")
     lines.append(f"Messages: {stats['total_messages']}")
     lines.append(f"Total cost: ${stats['total_cost']:.4f}")

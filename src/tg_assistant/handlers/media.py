@@ -28,7 +28,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     user_id = update.effective_user.id
 
-    if not rate_limiter.check(user_id):
+    if not await rate_limiter.check(user_id):
         await update.effective_message.reply_text(
             "Too many messages. Please wait a moment."
         )
@@ -81,7 +81,7 @@ async def handle_document(
     if not document:
         return
 
-    if not rate_limiter.check(user_id):
+    if not await rate_limiter.check(user_id):
         await update.effective_message.reply_text(
             "Too many messages. Please wait a moment."
         )

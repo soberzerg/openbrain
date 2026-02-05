@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import deque
 
@@ -12,23 +13,32 @@ class RateLimiter:
     def __init__(self, max_per_minute: int) -> None:
         self.max_per_minute = max_per_minute
         self._windows: dict[int, deque[float]] = {}
+        self._locks: dict[int, asyncio.Lock] = {}
 
-    def check(self, user_id: int) -> bool:
+    async def check(self, user_id: int) -> bool:
         """
         Record a request and return True if under limit, False if exceeded.
 
         Prunes timestamps older than 60 seconds before checking.
+        Thread-safe for concurrent access.
         """
-        now = time.monotonic()
-        window = self._windows.setdefault(user_id, deque())
+        # Get or create lock for this user
+        if user_id not in self._locks:
+            self._locks[user_id] = asyncio.Lock()
 
-        # Prune expired entries
-        cutoff = now - 60.0
-        while window and window[0] < cutoff:
-            window.popleft()
+        lock = self._locks[user_id]
 
-        if len(window) >= self.max_per_minute:
-            return False
+        async with lock:
+            now = time.monotonic()
+            window = self._windows.setdefault(user_id, deque())
 
-        window.append(now)
-        return True
+            # Prune expired entries
+            cutoff = now - 60.0
+            while window and window[0] < cutoff:
+                window.popleft()
+
+            if len(window) >= self.max_per_minute:
+                return False
+
+            window.append(now)
+            return True

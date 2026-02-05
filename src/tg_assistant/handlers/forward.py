@@ -78,7 +78,7 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_id = update.effective_user.id
     msg = update.effective_message
 
-    if not rate_limiter.check(user_id):
+    if not await rate_limiter.check(user_id):
         await msg.reply_text("Too many messages. Please wait a moment.")
         return
 

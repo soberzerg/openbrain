@@ -38,9 +38,14 @@ class TranscriptionService:
             Transcribed text.
 
         Raises:
-            TranscriptionError: If the API call fails.
+            TranscriptionError: If the API call fails or file cannot be read.
         """
         audio_path = Path(audio_path)
+
+        # Check file exists before opening
+        if not audio_path.exists():
+            raise TranscriptionError(f"Audio file not found: {audio_path}")
+
         url = f"{self.base_url}/audio/transcriptions"
 
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -69,3 +74,6 @@ class TranscriptionService:
             except httpx.RequestError as e:
                 logger.error("Whisper API request failed: %s", e)
                 raise TranscriptionError(f"Whisper API request failed: {e}") from e
+            except OSError as e:
+                logger.error("Failed to read audio file %s: %s", audio_path, e)
+                raise TranscriptionError(f"Failed to read audio file: {e}") from e

@@ -176,9 +176,14 @@ def create_application(config: Config) -> Application:
     # Debug: absolute catch-all to detect if any updates arrive
     async def _debug_catch_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
+        msg_preview = (
+            update.effective_message.text[:50]
+            if update.effective_message and update.effective_message.text
+            else "non-text"
+        )
         logger.warning(
             "Unhandled update: type=%s user_id=%s username=%s",
-            update.effective_message.text[:50] if update.effective_message and update.effective_message.text else "non-text",
+            msg_preview,
             user.id if user else "?",
             user.username if user else "?",
         )
