@@ -1,4 +1,4 @@
-"""Bot command handlers: /start, /help, /new, /status."""
+"""Bot command handlers: /start, /help, /new, /status, /tasks, /inbox, /daily, /week."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from tg_assistant.handlers._helpers import send_claude_response
 from tg_assistant.models.database import Database
 from tg_assistant.services.session_manager import SessionManager
 
@@ -18,8 +19,20 @@ HELP_TEXT = (
     "<b>Commands:</b>\n"
     "/new — Start a new session\n"
     "/status — Current session info\n"
+    "/tasks — Today's tasks from YouGile\n"
+    "/inbox — Obsidian inbox items\n"
+    "/daily — Daily review\n"
+    "/week — Weekly summary\n"
     "/help — Show this help"
 )
+
+# Pre-built prompts for shortcut commands
+_SHORTCUT_PROMPTS = {
+    "tasks": "Show my tasks for today from YouGile. Brief format.",
+    "inbox": "Show what's in my Obsidian inbox. List recent unprocessed items.",
+    "daily": "Run my daily review: today's tasks, inbox items, priorities. Brief.",
+    "week": "Generate a weekly summary: completed tasks, key notes added, upcoming deadlines.",
+}
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -81,9 +94,41 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         lines.append("No active session. Send a message to start one.")
 
     lines.append("")
-    lines.append(f"<b>Total stats:</b>")
+    lines.append("<b>Total stats:</b>")
     lines.append(f"Sessions: {stats['total_sessions']}")
     lines.append(f"Messages: {stats['total_messages']}")
     lines.append(f"Total cost: ${stats['total_cost']:.4f}")
 
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+async def cmd_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show today's tasks from YouGile."""
+    assert update.effective_user
+    await send_claude_response(
+        update, context, update.effective_user.id, _SHORTCUT_PROMPTS["tasks"]
+    )
+
+
+async def cmd_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show Obsidian inbox items."""
+    assert update.effective_user
+    await send_claude_response(
+        update, context, update.effective_user.id, _SHORTCUT_PROMPTS["inbox"]
+    )
+
+
+async def cmd_daily(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Run daily review."""
+    assert update.effective_user
+    await send_claude_response(
+        update, context, update.effective_user.id, _SHORTCUT_PROMPTS["daily"]
+    )
+
+
+async def cmd_week(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Generate weekly summary."""
+    assert update.effective_user
+    await send_claude_response(
+        update, context, update.effective_user.id, _SHORTCUT_PROMPTS["week"]
+    )

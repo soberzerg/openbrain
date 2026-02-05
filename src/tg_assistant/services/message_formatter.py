@@ -30,15 +30,23 @@ def split_message(text: str, max_length: int = TELEGRAM_MAX_LENGTH) -> list[str]
 
         # Try to find a good break point within the limit
         cut_point = remaining.rfind("\n\n", 0, max_length)
-        if cut_point <= 0:
+        if cut_point < 1:
             cut_point = remaining.rfind("\n", 0, max_length)
-        if cut_point <= 0:
+        if cut_point < 1:
             cut_point = remaining.rfind(" ", 0, max_length)
-        if cut_point <= 0:
+        if cut_point < 1:
             cut_point = max_length
 
-        chunks.append(remaining[:cut_point])
+        chunk = remaining[:cut_point]
+        chunks.append(chunk)
         remaining = remaining[cut_point:].lstrip("\n ")
+
+        # Safety check: ensure we're making progress
+        if not chunk or len(remaining) >= len(chunk) + len(chunks) * max_length:
+            # Fallback: hard cut to prevent infinite loop
+            if remaining:
+                chunks.append(remaining[:max_length])
+                remaining = remaining[max_length:]
 
 
     return chunks

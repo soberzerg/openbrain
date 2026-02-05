@@ -51,6 +51,17 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_telegram_id ON messages(telegram_id);
+
+CREATE TABLE IF NOT EXISTS follow_up_callbacks (
+    callback_id   TEXT PRIMARY KEY,
+    telegram_id   INTEGER NOT NULL,
+    content_type  TEXT NOT NULL,
+    action_type   TEXT NOT NULL,
+    skill_name    TEXT,
+    params        TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at    TEXT NOT NULL
+);
 """
 
 
@@ -65,6 +76,10 @@ class Database:
         """Open connection and create tables."""
         self._db = await aiosqlite.connect(str(self.db_path))
         self._db.row_factory = aiosqlite.Row
+
+        # Enable WAL mode for better concurrent access
+        await self._db.execute("PRAGMA journal_mode=WAL")
+
         await self._db.executescript(SCHEMA_SQL)
         await self._db.commit()
         logger.info("Database initialized at %s", self.db_path)
@@ -119,24 +134,26 @@ class Database:
     ) -> None:
         """Update session metadata."""
         assert self._db
+
+        # Build update clause with whitelisted columns only
         updates: list[str] = ["last_active = datetime('now')"]
         params: list[Any] = []
 
-        if status is not None:
-            updates.append("status = ?")
-            params.append(status)
-        if message_count is not None:
-            updates.append("message_count = ?")
-            params.append(message_count)
-        if total_cost is not None:
-            updates.append("total_cost = ?")
-            params.append(total_cost)
+        # Whitelist of allowed column names
+        allowed_updates = {
+            "status": status,
+            "message_count": message_count,
+            "total_cost": total_cost,
+        }
+
+        for column_name, value in allowed_updates.items():
+            if value is not None:
+                updates.append(f"{column_name} = ?")
+                params.append(value)
 
         params.append(session_id)
-        await self._db.execute(
-            f"UPDATE sessions SET {', '.join(updates)} WHERE session_id = ?",
-            params,
-        )
+        query = f"UPDATE sessions SET {', '.join(updates)} WHERE session_id = ?"
+        await self._db.execute(query, params)
         await self._db.commit()
 
     async def log_message(
@@ -173,6 +190,63 @@ class Database:
             ),
         )
         await self._db.commit()
+
+    async def save_callback(
+        self,
+        callback_id: str,
+        telegram_id: int,
+        content_type: str,
+        action_type: str,
+        skill_name: str | None = None,
+        params: str | None = None,
+        ttl_hours: int = 24,
+    ) -> None:
+        """Store an inline-button callback with expiration."""
+        assert self._db
+        await self._db.execute(
+            """
+            INSERT INTO follow_up_callbacks
+                (callback_id, telegram_id, content_type, action_type,
+                 skill_name, params, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now', ?))
+            """,
+            (
+                callback_id,
+                telegram_id,
+                content_type,
+                action_type,
+                skill_name,
+                params,
+                f"+{ttl_hours} hours",
+            ),
+        )
+        await self._db.commit()
+
+    async def get_callback(self, callback_id: str) -> dict[str, Any] | None:
+        """Look up a callback by ID. Returns None if not found or expired."""
+        assert self._db
+        cursor = await self._db.execute(
+            """
+            SELECT callback_id, telegram_id, content_type, action_type,
+                   skill_name, params, created_at, expires_at
+            FROM follow_up_callbacks
+            WHERE callback_id = ? AND expires_at > datetime('now')
+            """,
+            (callback_id,),
+        )
+        row = await cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+    async def cleanup_expired_callbacks(self) -> int:
+        """Delete expired callbacks. Returns count of deleted rows."""
+        assert self._db
+        cursor = await self._db.execute(
+            "DELETE FROM follow_up_callbacks WHERE expires_at <= datetime('now')"
+        )
+        await self._db.commit()
+        return cursor.rowcount
 
     async def get_user_stats(self, telegram_id: int) -> dict[str, Any]:
         """Get aggregate stats for a user."""
