@@ -15,15 +15,15 @@ from tg_assistant.services.session_manager import SessionManager
 logger = logging.getLogger(__name__)
 
 HELP_TEXT = (
-    "Send me any message and I'll process it through Claude Code.\n\n"
-    "<b>Commands:</b>\n"
-    "/new — Start a new session\n"
-    "/status — Current session info\n"
-    "/tasks — Today's tasks from YouGile\n"
-    "/inbox — Obsidian inbox items\n"
-    "/daily — Daily review\n"
-    "/week — Weekly summary\n"
-    "/help — Show this help"
+    "Отправьте любое сообщение, и я обработаю его через Claude Code.\n\n"
+    "<b>Команды:</b>\n"
+    "/new — Начать новую сессию (очистить контекст)\n"
+    "/status — Информация о текущей сессии\n"
+    "/tasks — Задачи на сегодня из YouGile\n"
+    "/inbox — Список элементов из Obsidian inbox\n"
+    "/daily — Запустить ежедневный обзор\n"
+    "/week — Сводка за неделю\n"
+    "/help — Показать это сообщение"
 )
 
 # Pre-built prompts for shortcut commands
