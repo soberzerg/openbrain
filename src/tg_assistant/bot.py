@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -43,6 +45,69 @@ from tg_assistant.services.session_manager import SessionManager
 from tg_assistant.services.transcription import TranscriptionService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BotCommandDef:
+    """Command definition with handler and description."""
+
+    command: str  # command name (without /)
+    description: str  # for Telegram menu (short, 3-256 chars)
+    handler: Callable  # handler function
+    help_text: str  # for /help command (can be longer)
+
+
+# Commands in order they should appear in menu
+BOT_COMMANDS = [
+    BotCommandDef(
+        command="start",
+        description="Начать работу с ботом",
+        handler=cmd_start,
+        help_text="Приветственное сообщение",
+    ),
+    BotCommandDef(
+        command="help",
+        description="Показать команды",
+        handler=cmd_help,
+        help_text="Показать это сообщение",
+    ),
+    BotCommandDef(
+        command="new",
+        description="Новый диалог",
+        handler=cmd_new_session,
+        help_text="Начать новую сессию (очистить контекст)",
+    ),
+    BotCommandDef(
+        command="status",
+        description="Статистика сессии",
+        handler=cmd_status,
+        help_text="Информация о текущей сессии",
+    ),
+    BotCommandDef(
+        command="tasks",
+        description="Задачи на сегодня",
+        handler=cmd_tasks,
+        help_text="Задачи на сегодня из YouGile",
+    ),
+    BotCommandDef(
+        command="inbox",
+        description="Непрочитанные заметки",
+        handler=cmd_inbox,
+        help_text="Список элементов из Obsidian inbox",
+    ),
+    BotCommandDef(
+        command="daily",
+        description="Ежедневный обзор",
+        handler=cmd_daily,
+        help_text="Запустить ежедневный обзор",
+    ),
+    BotCommandDef(
+        command="week",
+        description="Недельная сводка",
+        handler=cmd_week,
+        help_text="Сводка за неделю",
+    ),
+]
 
 
 def _load_routing_config(path: str) -> dict:
@@ -107,6 +172,9 @@ async def post_init(application: Application) -> None:
     # Schedule notifications
     setup_jobs(application)
 
+    # Register bot commands in Telegram menu
+    await _setup_bot_commands(application.bot)
+
     logger.info("Services initialized")
 
 
@@ -116,6 +184,17 @@ async def post_shutdown(application: Application) -> None:
     if db:
         await db.close()
         logger.info("Database connection closed")
+
+
+async def _setup_bot_commands(bot) -> None:
+    """Register bot commands with Telegram API for menu display."""
+    commands = [BotCommand(cmd.command, cmd.description) for cmd in BOT_COMMANDS]
+
+    try:
+        await bot.set_my_commands(commands)
+        logger.info("Registered %d commands in Telegram menu", len(commands))
+    except Exception as e:
+        logger.error("Failed to set bot commands: %s", e)
 
 
 def create_application(config: Config) -> Application:
@@ -137,15 +216,9 @@ def create_application(config: Config) -> Application:
     # Auth filter: only process messages from allowed users
     auth_filter = filters.User(user_id=config.allowed_user_ids)
 
-    # Commands (highest priority)
-    app.add_handler(CommandHandler("start", cmd_start, filters=auth_filter))
-    app.add_handler(CommandHandler("help", cmd_help, filters=auth_filter))
-    app.add_handler(CommandHandler("new", cmd_new_session, filters=auth_filter))
-    app.add_handler(CommandHandler("status", cmd_status, filters=auth_filter))
-    app.add_handler(CommandHandler("tasks", cmd_tasks, filters=auth_filter))
-    app.add_handler(CommandHandler("inbox", cmd_inbox, filters=auth_filter))
-    app.add_handler(CommandHandler("daily", cmd_daily, filters=auth_filter))
-    app.add_handler(CommandHandler("week", cmd_week, filters=auth_filter))
+    # Register commands from centralized registry (highest priority)
+    for cmd_def in BOT_COMMANDS:
+        app.add_handler(CommandHandler(cmd_def.command, cmd_def.handler, filters=auth_filter))
 
     # Unified content router — handles all non-command messages
     app.add_handler(
