@@ -11,7 +11,10 @@ class TestSplitMessage:
         assert split_message("hello") == ["hello"]
 
     def test_empty_message(self):
-        assert split_message("") == [""]
+        assert split_message("") == []
+
+    def test_whitespace_only_message(self):
+        assert split_message("   \n  ") == []
 
     def test_exact_limit(self):
         text = "a" * 4096
