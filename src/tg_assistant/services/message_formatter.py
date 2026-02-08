@@ -14,8 +14,8 @@ def split_message(text: str, max_length: int = TELEGRAM_MAX_LENGTH) -> list[str]
     Tries to split at paragraph boundaries, then line boundaries,
     then word boundaries, then hard-cuts at max_length.
     """
-    if not text:
-        return [""]
+    if not text or not text.strip():
+        return []
 
     if len(text) <= max_length:
         return [text]

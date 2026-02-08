@@ -53,6 +53,8 @@ async def send_claude_response(
         response = await session_mgr.send_message(user_id, prompt)
 
         chunks = split_message(response.text)
+        if not chunks:
+            chunks = ["(empty response)"]
         for chunk in chunks:
             formatted, parse_mode = format_for_telegram(chunk)
             try:
