@@ -43,20 +43,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # Extract text from message or caption
     text = msg.text or msg.caption or ""
 
-    # Add forwarded message metadata if present
-    if msg.forward_from or msg.forward_sender_name or msg.forward_date:
+    # Add forwarded message metadata if present (using forward_origin API)
+    if msg.forward_origin:
         parts = []
+        origin = msg.forward_origin
 
-        # Sender info
-        if msg.forward_sender_name:
-            parts.append(f"From: {msg.forward_sender_name}")
-        elif msg.forward_from:
-            full_name = msg.forward_from.full_name
-            parts.append(f"From: {full_name}")
+        # Extract sender info based on origin type
+        if hasattr(origin, "sender_user") and origin.sender_user:
+            parts.append(f"From: {origin.sender_user.full_name}")
+        elif hasattr(origin, "sender_user_name") and origin.sender_user_name:
+            parts.append(f"From: {origin.sender_user_name}")
+        elif hasattr(origin, "chat") and origin.chat:
+            parts.append(f"From: {origin.chat.title or origin.chat.full_name}")
+        elif hasattr(origin, "sender_chat") and origin.sender_chat:
+            parts.append(f"From: {origin.sender_chat.title}")
 
         # Forward date
-        if msg.forward_date:
-            parts.append(f"Date: {msg.forward_date.isoformat()}")
+        if hasattr(origin, "date") and origin.date:
+            parts.append(f"Date: {origin.date.isoformat()}")
 
         # Separate metadata from content
         parts.append("")
