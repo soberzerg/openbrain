@@ -254,3 +254,19 @@ class TestMessageQueue:
 
         assert len(results) == 1
         assert results[0] == ("Hello from Claude!", False)
+
+    @pytest.mark.asyncio
+    async def test_mark_for_expiry_during_drain_is_applied(self, session_mgr, mock_cli):
+        """Pending expiry set during drain callback is applied before return."""
+        await session_mgr.send_message(111, "bootstrap")
+        assert session_mgr.get_active_session(111) is not None
+
+        async def on_response(resp: ClaudeResponse, from_queue: bool) -> None:
+            if not from_queue:
+                # Simulate /new arriving while send_message_with_queue is draining.
+                session_mgr.mark_for_expiry(111)
+
+        await session_mgr.send_message_with_queue(111, "main", on_response)
+
+        assert session_mgr.get_active_session(111) is None
+        assert 111 not in session_mgr._pending_expiry

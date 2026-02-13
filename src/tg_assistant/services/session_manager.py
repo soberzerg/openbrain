@@ -132,6 +132,21 @@ class SessionManager:
         # Also discard any queued messages
         self._queues.pop(user_id, None)
 
+    async def _apply_pending_expiry(self, user_id: int) -> None:
+        """Expire session if user has a pending expiry request."""
+        if user_id not in self._pending_expiry:
+            return
+
+        self._pending_expiry.discard(user_id)
+        old_session = self._sessions.pop(user_id, None)
+        if old_session:
+            await self._do_expire(old_session)
+            logger.info(
+                "Session %s expired (pending) for user %d",
+                old_session.session_id[:8],
+                user_id,
+            )
+
     # -- Send with session lifecycle ----------------------------------------
 
     async def _do_send(self, user_id: int, text: str) -> ClaudeResponse:
@@ -193,16 +208,7 @@ class SessionManager:
             )
 
         # Handle pending expiry (e.g. user sent /new while CLI was running)
-        if user_id in self._pending_expiry:
-            self._pending_expiry.discard(user_id)
-            old_session = self._sessions.pop(user_id, None)
-            if old_session:
-                await self._do_expire(old_session)
-                logger.info(
-                    "Session %s expired (pending) for user %d",
-                    old_session.session_id[:8],
-                    user_id,
-                )
+        await self._apply_pending_expiry(user_id)
 
         return response
 
@@ -252,6 +258,10 @@ class SessionManager:
                     response = await self._do_send(user_id, combined)
                 await on_response(response, True)
         finally:
+            # /new may arrive while we are between lock-protected sends.
+            # Apply pending expiry once more before leaving draining mode.
+            async with lock:
+                await self._apply_pending_expiry(user_id)
             self._draining.discard(user_id)
 
     async def expire_session(self, user_id: int) -> None:
