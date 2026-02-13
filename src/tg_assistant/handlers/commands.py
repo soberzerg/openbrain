@@ -66,7 +66,17 @@ async def cmd_new_session(
     """Force-expire current session and start fresh."""
     assert update.effective_message and update.effective_user
     session_mgr: SessionManager = context.bot_data["session_manager"]
-    await session_mgr.expire_session(update.effective_user.id)
+    user_id = update.effective_user.id
+
+    if session_mgr.is_busy(user_id):
+        session_mgr.mark_for_expiry(user_id)
+        await update.effective_message.reply_text(
+            "Claude is still processing. Queued messages cleared.\n"
+            "Session will reset after the current task finishes."
+        )
+        return
+
+    await session_mgr.expire_session(user_id)
     await update.effective_message.reply_text(
         "Session reset. Next message starts a new conversation."
     )
@@ -92,6 +102,13 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         lines.append(f"Session cost: ${session.total_cost:.4f}")
     else:
         lines.append("No active session. Send a message to start one.")
+
+    if session_mgr.is_busy(user_id):
+        lines.append("")
+        lines.append("\u23f3 Claude is processing a request...")
+        queue_size = session_mgr.get_queue_size(user_id)
+        if queue_size > 0:
+            lines.append(f"Queued messages: {queue_size}")
 
     lines.append("")
     lines.append("<b>Total stats:</b>")
