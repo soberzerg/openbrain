@@ -35,7 +35,8 @@ async def _send_response_to_chat(
             sent = await bot.send_message(
                 chat_id=chat_id, text=formatted, parse_mode=parse_mode
             )
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to send formatted message: %s", e)
             sent = await bot.send_message(chat_id=chat_id, text=chunk)
 
         await db.log_message(

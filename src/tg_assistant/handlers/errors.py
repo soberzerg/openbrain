@@ -24,4 +24,4 @@ async def error_handler(
                 text="An unexpected error occurred. Please try again.",
             )
         except Exception:
-            pass  # If we can't even send the error message, just log
+            logger.warning("Failed to notify user of error", exc_info=True)

@@ -194,11 +194,12 @@ class ClaudeCli:
 
         except asyncio.TimeoutError:
             logger.error("Claude CLI timed out after %ds", self.timeout)
-            if process:
-                process.kill()
-                await process.wait()
             raise
-
         except json.JSONDecodeError as e:
             logger.error("Failed to parse CLI output: %s", e)
             raise ClaudeCliError(f"Failed to parse CLI output: {e}") from e
+        finally:
+            # Ensure process cleanup in all error paths
+            if process and process.returncode is None:
+                process.kill()
+                await process.wait()
