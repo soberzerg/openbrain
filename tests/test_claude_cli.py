@@ -106,6 +106,7 @@ class TestClaudeCliSend:
     async def test_timeout(self, cli):
         """TimeoutError is raised and process is killed on timeout."""
         process = AsyncMock()
+        process.returncode = None  # Process is still running when timeout occurs
         process.kill = AsyncMock()
         process.wait = AsyncMock()
 
