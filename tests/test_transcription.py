@@ -72,7 +72,9 @@ async def test_transcribe_api_error(service: TranscriptionService, audio_file: P
     mock_response.status_code = 401
     mock_response.text = "Unauthorized"
     mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-        "401", request=MagicMock(), response=mock_response,
+        "401",
+        request=MagicMock(),
+        response=mock_response,
     )
 
     mock_client = _make_mock_client(mock_response)

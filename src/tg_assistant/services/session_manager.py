@@ -103,9 +103,7 @@ class SessionManager:
         """
         queue = self._queues.setdefault(user_id, [])
         if len(queue) >= MAX_QUEUE_SIZE:
-            raise QueueFullError(
-                f"Queue full ({MAX_QUEUE_SIZE} messages). Please wait."
-            )
+            raise QueueFullError(f"Queue full ({MAX_QUEUE_SIZE} messages). Please wait.")
         queue.append(QueuedMessage(text=text))
         return len(queue)
 
@@ -203,9 +201,7 @@ class SessionManager:
                 message_count=session.message_count,
                 total_cost=session.total_cost,
             )
-            logger.info(
-                "New session %s for user %d", session.session_id[:8], user_id
-            )
+            logger.info("New session %s for user %d", session.session_id[:8], user_id)
 
         # Handle pending expiry (e.g. user sent /new while CLI was running)
         await self._apply_pending_expiry(user_id)

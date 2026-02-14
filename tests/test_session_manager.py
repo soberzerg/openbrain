@@ -225,9 +225,7 @@ class TestMessageQueue:
                 # Simulate messages arriving while CLI is busy
                 session_mgr.queue_message(111, "queued 1")
                 session_mgr.queue_message(111, "queued 2")
-            return ClaudeResponse(
-                f"Response {call_count}", "test-session-id", 0.01, 100, False, 1
-            )
+            return ClaudeResponse(f"Response {call_count}", "test-session-id", 0.01, 100, False, 1)
 
         mock_cli.send.side_effect = counting_send
 

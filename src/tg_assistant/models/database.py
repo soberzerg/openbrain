@@ -87,7 +87,8 @@ class Database:
         last_name: str | None = None,
     ) -> None:
         """Insert or update a user record."""
-        assert self._db
+        if self._db is None:
+            raise RuntimeError("Database not initialized")
         await self._db.execute(
             """
             INSERT INTO users (telegram_id, username, first_name, last_name)
@@ -102,11 +103,10 @@ class Database:
         )
         await self._db.commit()
 
-    async def create_session(
-        self, session_id: str, telegram_id: int
-    ) -> None:
+    async def create_session(self, session_id: str, telegram_id: int) -> None:
         """Record a new Claude Code session."""
-        assert self._db
+        if self._db is None:
+            raise RuntimeError("Database not initialized")
         await self._db.execute(
             "INSERT INTO sessions (session_id, telegram_id) VALUES (?, ?)",
             (session_id, telegram_id),
@@ -122,7 +122,8 @@ class Database:
         total_cost: float | None = None,
     ) -> None:
         """Update session metadata."""
-        assert self._db
+        if self._db is None:
+            raise RuntimeError("Database not initialized")
 
         # Build update clause with whitelisted columns only
         updates: list[str] = ["last_active = datetime('now')"]
@@ -158,7 +159,8 @@ class Database:
         duration_ms: int = 0,
     ) -> None:
         """Log an incoming or outgoing message."""
-        assert self._db
+        if self._db is None:
+            raise RuntimeError("Database not initialized")
         await self._db.execute(
             """
             INSERT INTO messages
@@ -182,7 +184,8 @@ class Database:
 
     async def get_user_stats(self, telegram_id: int) -> dict[str, Any]:
         """Get aggregate stats for a user."""
-        assert self._db
+        if self._db is None:
+            raise RuntimeError("Database not initialized")
         cursor = await self._db.execute(
             """
             SELECT

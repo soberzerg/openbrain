@@ -32,10 +32,9 @@ async def _send_response_to_chat(
     for chunk in chunks:
         formatted, parse_mode = format_for_telegram(chunk)
         try:
-            sent = await bot.send_message(
-                chat_id=chat_id, text=formatted, parse_mode=parse_mode
-            )
+            sent = await bot.send_message(chat_id=chat_id, text=formatted, parse_mode=parse_mode)
         except Exception:
+            logger.warning("Failed to send formatted message", exc_info=True)
             sent = await bot.send_message(chat_id=chat_id, text=chunk)
 
         await db.log_message(
@@ -116,14 +115,10 @@ async def send_claude_response(
             await context.bot.send_message(
                 chat_id=chat_id, text="\U0001f4e8 Processing queued messages..."
             )
-        await _send_response_to_chat(
-            context.bot, chat_id, db, user_id, response, msg_type
-        )
+        await _send_response_to_chat(context.bot, chat_id, db, user_id, response, msg_type)
 
     try:
-        await session_mgr.send_message_with_queue(
-            user_id, prompt, on_response=on_response
-        )
+        await session_mgr.send_message_with_queue(user_id, prompt, on_response=on_response)
 
     except ClaudeCliError as e:
         logger.error("Claude CLI error for user %d: %s", user_id, e)

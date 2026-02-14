@@ -105,8 +105,6 @@ BOT_COMMANDS = [
 ]
 
 
-
-
 async def post_init(application: Application) -> None:
     """Initialize shared services after the application is built."""
     config: Config = application.bot_data["config"]
@@ -208,7 +206,8 @@ def create_application(config: Config) -> Application:
     # All other messages → Claude directly
     app.add_handler(
         MessageHandler(
-            auth_filter & (
+            auth_filter
+            & (
                 filters.FORWARDED
                 | filters.PHOTO
                 | filters.Document.ALL

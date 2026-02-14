@@ -37,10 +37,22 @@ PERMISSION_PROFILES: dict[str, PermissionProfile] = {
         name="safe",
         permission_mode="acceptEdits",
         allowed_tools=(
-            "Read", "Grep", "Glob", "Edit", "Write",
-            "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)",
-            "Bash(find:*)", "Bash(git:log)", "Bash(git:status)",
-            "Bash(git:diff)", "Bash(git:show)", "Bash(pwd:*)", "Bash(echo:*)",
+            "Read",
+            "Grep",
+            "Glob",
+            "Edit",
+            "Write",
+            "Bash(ls:*)",
+            "Bash(cat:*)",
+            "Bash(head:*)",
+            "Bash(tail:*)",
+            "Bash(find:*)",
+            "Bash(git:log)",
+            "Bash(git:status)",
+            "Bash(git:diff)",
+            "Bash(git:show)",
+            "Bash(pwd:*)",
+            "Bash(echo:*)",
         ),
         append_system_prompt="You are in safe mode. Destructive commands are blocked.",
     ),
@@ -48,10 +60,19 @@ PERMISSION_PROFILES: dict[str, PermissionProfile] = {
         name="readonly",
         permission_mode="plan",
         allowed_tools=(
-            "Read", "Grep", "Glob",
-            "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)",
-            "Bash(find:*)", "Bash(git:log)", "Bash(git:status)",
-            "Bash(git:diff)", "Bash(git:show)", "Bash(pwd:*)",
+            "Read",
+            "Grep",
+            "Glob",
+            "Bash(ls:*)",
+            "Bash(cat:*)",
+            "Bash(head:*)",
+            "Bash(tail:*)",
+            "Bash(find:*)",
+            "Bash(git:log)",
+            "Bash(git:status)",
+            "Bash(git:diff)",
+            "Bash(git:show)",
+            "Bash(pwd:*)",
         ),
         append_system_prompt="You are in read-only mode. You cannot modify any files.",
     ),
@@ -95,7 +116,8 @@ class ClaudeCli:
         cmd = [
             self.cli_path,
             "-p",
-            "--output-format", "json",
+            "--output-format",
+            "json",
         ]
 
         # Apply permission profile
@@ -165,9 +187,7 @@ class ClaudeCli:
             if process.returncode != 0:
                 error_text = stderr.decode().strip()
                 logger.error("Claude CLI error (code %d): %s", process.returncode, error_text)
-                raise ClaudeCliError(
-                    f"CLI exited with code {process.returncode}: {error_text}"
-                )
+                raise ClaudeCliError(f"CLI exited with code {process.returncode}: {error_text}")
 
             data = json.loads(stdout.decode())
 
@@ -194,11 +214,12 @@ class ClaudeCli:
 
         except asyncio.TimeoutError:
             logger.error("Claude CLI timed out after %ds", self.timeout)
-            if process:
-                process.kill()
-                await process.wait()
             raise
-
         except json.JSONDecodeError as e:
             logger.error("Failed to parse CLI output: %s", e)
             raise ClaudeCliError(f"Failed to parse CLI output: {e}") from e
+        finally:
+            # Ensure process cleanup in all error paths
+            if process and process.returncode is None:
+                process.kill()
+                await process.wait()
