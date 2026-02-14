@@ -60,9 +60,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(HELP_TEXT, parse_mode="HTML")
 
 
-async def cmd_new_session(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def cmd_new_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Force-expire current session and start fresh."""
     assert update.effective_message and update.effective_user
     session_mgr: SessionManager = context.bot_data["session_manager"]
@@ -146,6 +144,4 @@ async def cmd_daily(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_week(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Generate weekly summary."""
     assert update.effective_user
-    await send_claude_response(
-        update, context, update.effective_user.id, _SHORTCUT_PROMPTS["week"]
-    )
+    await send_claude_response(update, context, update.effective_user.id, _SHORTCUT_PROMPTS["week"])

@@ -62,15 +62,14 @@ class TranscriptionService:
                 text = data.get("text", "").strip()
                 logger.info(
                     "Transcription complete: %d chars from %s",
-                    len(text), audio_path.name,
+                    len(text),
+                    audio_path.name,
                 )
                 return text
 
             except httpx.HTTPStatusError as e:
                 logger.error("Whisper API error %d: %s", e.response.status_code, e.response.text)
-                raise TranscriptionError(
-                    f"Whisper API returned {e.response.status_code}"
-                ) from e
+                raise TranscriptionError(f"Whisper API returned {e.response.status_code}") from e
             except httpx.RequestError as e:
                 logger.error("Whisper API request failed: %s", e)
                 raise TranscriptionError(f"Whisper API request failed: {e}") from e

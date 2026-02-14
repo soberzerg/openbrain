@@ -33,9 +33,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     if not await rate_limiter.check(user_id):
-        await update.effective_message.reply_text(
-            "Too many messages. Please wait a moment."
-        )
+        await update.effective_message.reply_text("Too many messages. Please wait a moment.")
         return
 
     if not transcription:
@@ -84,8 +82,13 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Send transcription to Claude
     prompt = f"[Voice transcription]: {text}"
     await send_claude_response(
-        update, context, user_id, prompt,
-        msg_type="voice", log_input=False, file_path=str(filepath),
+        update,
+        context,
+        user_id,
+        prompt,
+        msg_type="voice",
+        log_input=False,
+        file_path=str(filepath),
     )
 
 
@@ -105,9 +108,7 @@ async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if not await rate_limiter.check(user_id):
-        await update.effective_message.reply_text(
-            "Too many messages. Please wait a moment."
-        )
+        await update.effective_message.reply_text("Too many messages. Please wait a moment.")
         return
 
     if not transcription:
@@ -133,9 +134,7 @@ async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if not text:
-        await update.effective_message.reply_text(
-            "Could not recognize speech in this video note."
-        )
+        await update.effective_message.reply_text("Could not recognize speech in this video note.")
         return
 
     await update.effective_message.reply_text(f"🎤 {text}")
@@ -151,6 +150,11 @@ async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     prompt = f"[Voice transcription]: {text}"
     await send_claude_response(
-        update, context, user_id, prompt,
-        msg_type="voice", log_input=False, file_path=str(filepath),
+        update,
+        context,
+        user_id,
+        prompt,
+        msg_type="voice",
+        log_input=False,
+        file_path=str(filepath),
     )

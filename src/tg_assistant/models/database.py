@@ -103,9 +103,7 @@ class Database:
         )
         await self._db.commit()
 
-    async def create_session(
-        self, session_id: str, telegram_id: int
-    ) -> None:
+    async def create_session(self, session_id: str, telegram_id: int) -> None:
         """Record a new Claude Code session."""
         if self._db is None:
             raise RuntimeError("Database not initialized")

@@ -48,7 +48,6 @@ def split_message(text: str, max_length: int = TELEGRAM_MAX_LENGTH) -> list[str]
                 chunks.append(remaining[:max_length])
                 remaining = remaining[max_length:]
 
-
     return chunks
 
 
