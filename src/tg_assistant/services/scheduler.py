@@ -9,15 +9,13 @@ from zoneinfo import ZoneInfo
 from telegram.ext import Application, ContextTypes
 
 from tg_assistant.config import Config
-from tg_assistant.services.claude_cli import ClaudeCliError
+from tg_assistant.services.claude_cli import ClaudeCliError, ClaudeResponse
 from tg_assistant.services.message_formatter import format_for_telegram, split_message
 from tg_assistant.services.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
-MORNING_DIGEST_PROMPT = (
-    "Run my daily review: today's tasks, inbox items, priorities. Brief."
-)
+MORNING_DIGEST_PROMPT = "Run my daily review: today's tasks, inbox items, priorities. Brief."
 
 WEEKLY_SUMMARY_PROMPT = (
     "Generate a weekly summary: completed tasks, key notes added, upcoming deadlines."
@@ -35,17 +33,21 @@ async def _send_notification(
 
     for user_id in config.allowed_user_ids:
         try:
-            response = await session_mgr.send_message(user_id, prompt)
-            chunks = split_message(response.text)
-            for chunk in chunks:
-                formatted, parse_mode = format_for_telegram(chunk)
-                try:
-                    await context.bot.send_message(
-                        chat_id=user_id, text=formatted, parse_mode=parse_mode,
-                    )
-                except Exception:
-                    await context.bot.send_message(chat_id=user_id, text=chunk)
 
+            async def _on_response(response: ClaudeResponse, from_queue: bool) -> None:
+                chunks = split_message(response.text)
+                for chunk in chunks:
+                    formatted, parse_mode = format_for_telegram(chunk)
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user_id,
+                            text=formatted,
+                            parse_mode=parse_mode,
+                        )
+                    except Exception:
+                        await context.bot.send_message(chat_id=user_id, text=chunk)
+
+            await session_mgr.send_message_with_queue(user_id, prompt, on_response=_on_response)
             logger.info("%s sent to user %d", label, user_id)
 
         except (ClaudeCliError, Exception) as e:
@@ -85,7 +87,8 @@ def setup_jobs(application: Application) -> None:
     )
     logger.info(
         "Morning digest scheduled at %02d:00 %s",
-        config.morning_digest_hour, config.timezone,
+        config.morning_digest_hour,
+        config.timezone,
     )
 
     # Weekly summary — specific day of week
@@ -97,5 +100,7 @@ def setup_jobs(application: Application) -> None:
     )
     logger.info(
         "Weekly summary scheduled: day=%d at %02d:00 %s",
-        config.weekly_summary_day, config.weekly_summary_hour, config.timezone,
+        config.weekly_summary_day,
+        config.weekly_summary_hour,
+        config.timezone,
     )

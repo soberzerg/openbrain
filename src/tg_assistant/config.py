@@ -22,6 +22,7 @@ class Config:
     claude_cli_path: str
     claude_working_dir: str
     claude_timeout_seconds: int = 120
+    claude_permission_profile: str = "full"
 
     # Sessions
     session_timeout_minutes: int = 30
@@ -91,6 +92,7 @@ class Config:
             claude_cli_path=claude_cli_path,
             claude_working_dir=claude_working_dir,
             claude_timeout_seconds=int(os.getenv("CLAUDE_TIMEOUT_SECONDS", "120")),
+            claude_permission_profile=os.getenv("CLAUDE_PERMISSION_PROFILE", "full"),
             session_timeout_minutes=int(os.getenv("SESSION_TIMEOUT_MINUTES", "30")),
             obsidian_vault_path=os.getenv("OBSIDIAN_VAULT_PATH", ""),
             obsidian_inbox_subdir=os.getenv("OBSIDIAN_INBOX_SUBDIR", "00_Inbox"),
@@ -109,6 +111,18 @@ class Config:
             upload_dir=upload_dir,
             db_path=db_path,
         )
+
+        # Validate permission profile
+        from tg_assistant.services.claude_cli import PERMISSION_PROFILES
+
+        if config.claude_permission_profile not in PERMISSION_PROFILES:
+            available = ", ".join(sorted(PERMISSION_PROFILES))
+            print(
+                f"ERROR: Unknown CLAUDE_PERMISSION_PROFILE='{config.claude_permission_profile}'. "
+                f"Available: {available}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
         # Ensure runtime directories exist
         config.data_dir.mkdir(parents=True, exist_ok=True)

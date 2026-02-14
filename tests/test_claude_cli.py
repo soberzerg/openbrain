@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from tg_assistant.services.claude_cli import ClaudeCli, ClaudeCliError
+from tg_assistant.config import Config
+from tg_assistant.services.claude_cli import (
+    PERMISSION_PROFILES,
+    ClaudeCli,
+    ClaudeCliError,
+)
 
 
 @pytest.fixture
@@ -101,6 +106,7 @@ class TestClaudeCliSend:
     async def test_timeout(self, cli):
         """TimeoutError is raised and process is killed on timeout."""
         process = AsyncMock()
+        process.returncode = None  # Process is still running when timeout occurs
         process.kill = AsyncMock()
         process.wait = AsyncMock()
 
@@ -118,7 +124,7 @@ class TestClaudeCliSend:
 
     @pytest.mark.asyncio
     async def test_command_includes_permissions_flag(self, cli):
-        """CLI command includes --dangerously-skip-permissions."""
+        """Default (full) profile includes --dangerously-skip-permissions."""
         process = _make_process(GOOD_RESPONSE)
         with patch("asyncio.create_subprocess_exec", return_value=process) as mock_exec:
             await cli.send("Hello")
@@ -148,3 +154,100 @@ class TestGenerateSessionId:
     def test_unique_ids(self, cli):
         ids = {cli.generate_session_id() for _ in range(100)}
         assert len(ids) == 100
+
+
+class TestPermissionProfiles:
+    """Test permission profile definitions."""
+
+    def test_full_profile(self):
+        profile = PERMISSION_PROFILES["full"]
+        assert profile.use_dangerous_skip is True
+        assert profile.allowed_tools is None
+        assert profile.permission_mode is None
+
+    def test_safe_profile(self):
+        profile = PERMISSION_PROFILES["safe"]
+        assert profile.use_dangerous_skip is False
+        assert profile.permission_mode == "acceptEdits"
+        assert "Read" in profile.allowed_tools
+        assert "Edit" in profile.allowed_tools
+        assert "Write" in profile.allowed_tools
+        assert "Bash(git:log)" in profile.allowed_tools
+
+    def test_readonly_profile(self):
+        profile = PERMISSION_PROFILES["readonly"]
+        assert profile.use_dangerous_skip is False
+        assert profile.permission_mode == "plan"
+        assert "Read" in profile.allowed_tools
+        assert "Grep" in profile.allowed_tools
+        assert "Glob" in profile.allowed_tools
+        assert "Edit" not in profile.allowed_tools
+        assert "Write" not in profile.allowed_tools
+
+    def test_unknown_profile_raises(self):
+        with pytest.raises(KeyError):
+            PERMISSION_PROFILES["nonexistent"]
+
+
+def _make_config_with_profile(tmp_path, profile: str) -> Config:
+    """Create a Config with a specific permission profile."""
+    (tmp_path / "data" / "uploads").mkdir(parents=True, exist_ok=True)
+    return Config(
+        bot_token="test-token",
+        allowed_user_ids=[111],
+        claude_cli_path="/usr/bin/echo",
+        claude_working_dir=str(tmp_path),
+        claude_permission_profile=profile,
+        data_dir=tmp_path / "data",
+        upload_dir=tmp_path / "data" / "uploads",
+        db_path=tmp_path / "data" / "test.db",
+    )
+
+
+class TestBuildCommandWithProfiles:
+    """Test CLI command building with different profiles."""
+
+    def test_full_profile_command(self, tmp_path):
+        cli = ClaudeCli(_make_config_with_profile(tmp_path, "full"))
+        cmd = cli._build_command()
+        assert "--dangerously-skip-permissions" in cmd
+        assert "--allowedTools" not in cmd
+        assert "--permission-mode" not in cmd
+
+    def test_safe_profile_command(self, tmp_path):
+        cli = ClaudeCli(_make_config_with_profile(tmp_path, "safe"))
+        cmd = cli._build_command()
+        assert "--dangerously-skip-permissions" not in cmd
+        assert "--permission-mode" in cmd
+        idx = cmd.index("--permission-mode")
+        assert cmd[idx + 1] == "acceptEdits"
+        assert "--allowedTools" in cmd
+        tools_idx = cmd.index("--allowedTools")
+        tools_str = cmd[tools_idx + 1]
+        assert "Read" in tools_str
+        assert "Edit" in tools_str
+        assert "Write" in tools_str
+        assert "--append-system-prompt" in cmd
+
+    def test_readonly_profile_command(self, tmp_path):
+        cli = ClaudeCli(_make_config_with_profile(tmp_path, "readonly"))
+        cmd = cli._build_command()
+        assert "--dangerously-skip-permissions" not in cmd
+        assert "--permission-mode" in cmd
+        idx = cmd.index("--permission-mode")
+        assert cmd[idx + 1] == "plan"
+        assert "--allowedTools" in cmd
+        tools_idx = cmd.index("--allowedTools")
+        tools_str = cmd[tools_idx + 1]
+        assert "Read" in tools_str
+        assert "Grep" in tools_str
+        assert "Edit" not in tools_str
+        assert "Write" not in tools_str
+
+    def test_profile_with_session_flags(self, tmp_path):
+        cli = ClaudeCli(_make_config_with_profile(tmp_path, "safe"))
+        cmd = cli._build_command(session_id="test-123", is_resume=False)
+        assert "--session-id" in cmd
+        assert "test-123" in cmd
+        assert "--allowedTools" in cmd
+        assert "--permission-mode" in cmd

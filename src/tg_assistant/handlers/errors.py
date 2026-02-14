@@ -10,9 +10,7 @@ from telegram.ext import ContextTypes
 logger = logging.getLogger(__name__)
 
 
-async def error_handler(
-    update: object, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Global error handler — last line of defense."""
     logger.exception("Unhandled exception", exc_info=context.error)
 
@@ -24,4 +22,4 @@ async def error_handler(
                 text="An unexpected error occurred. Please try again.",
             )
         except Exception:
-            pass  # If we can't even send the error message, just log
+            logger.warning("Failed to notify user of error", exc_info=True)

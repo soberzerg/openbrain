@@ -5,14 +5,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
-import yaml
 from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
     ApplicationBuilder,
-    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -32,13 +29,11 @@ from tg_assistant.handlers.commands import (
     cmd_week,
 )
 from tg_assistant.handlers.errors import error_handler
-from tg_assistant.handlers.router import handle_callback, handle_routed_message
+from tg_assistant.handlers.text import handle_text
+from tg_assistant.handlers.voice import handle_video_note, handle_voice
 from tg_assistant.models.database import Database
-from tg_assistant.services.action_router import ActionRouter
 from tg_assistant.services.claude_cli import ClaudeCli
-from tg_assistant.services.content_classifier import ContentClassifier
 from tg_assistant.services.git_sync import GitSync
-from tg_assistant.services.inbox_writer import InboxWriter
 from tg_assistant.services.rate_limiter import RateLimiter
 from tg_assistant.services.scheduler import setup_jobs
 from tg_assistant.services.session_manager import SessionManager
@@ -110,16 +105,6 @@ BOT_COMMANDS = [
 ]
 
 
-def _load_routing_config(path: str) -> dict:
-    """Load routing YAML config. Returns empty dict if file not found."""
-    config_path = Path(path)
-    if not config_path.exists():
-        logger.warning("Routing config not found: %s — using defaults", path)
-        return {}
-    with open(config_path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-
-
 async def post_init(application: Application) -> None:
     """Initialize shared services after the application is built."""
     config: Config = application.bot_data["config"]
@@ -148,26 +133,10 @@ async def post_init(application: Application) -> None:
     else:
         logger.info("Transcription disabled (no OPENAI_API_KEY)")
 
-    # Content routing services
-    routing_config = _load_routing_config(config.routing_config_path)
-    classifier = ContentClassifier(routing_config)
-    action_router = ActionRouter(routing_config)
-
-    # Inbox writer (optional — requires Obsidian vault path)
-    inbox_writer = None
-    if config.obsidian_vault_path:
-        inbox_writer = InboxWriter(config.obsidian_vault_path, config.obsidian_inbox_subdir)
-        logger.info("Inbox writer enabled for %s", config.obsidian_vault_path)
-    else:
-        logger.info("Inbox writer disabled (no OBSIDIAN_VAULT_PATH)")
-
     application.bot_data["db"] = db
     application.bot_data["session_manager"] = session_mgr
     application.bot_data["rate_limiter"] = rate_limiter
     application.bot_data["transcription"] = transcription
-    application.bot_data["content_classifier"] = classifier
-    application.bot_data["action_router"] = action_router
-    application.bot_data["inbox_writer"] = inbox_writer
 
     # Schedule notifications
     setup_jobs(application)
@@ -220,23 +189,33 @@ def create_application(config: Config) -> Application:
     for cmd_def in BOT_COMMANDS:
         app.add_handler(CommandHandler(cmd_def.command, cmd_def.handler, filters=auth_filter))
 
-    # Unified content router — handles all non-command messages
+    # Voice and video notes → transcription → Claude
     app.add_handler(
         MessageHandler(
-            auth_filter & (
+            auth_filter & filters.VOICE,
+            handle_voice,
+        )
+    )
+    app.add_handler(
+        MessageHandler(
+            auth_filter & filters.VIDEO_NOTE,
+            handle_video_note,
+        )
+    )
+
+    # All other messages → Claude directly
+    app.add_handler(
+        MessageHandler(
+            auth_filter
+            & (
                 filters.FORWARDED
-                | filters.VOICE
-                | filters.VIDEO_NOTE
                 | filters.PHOTO
                 | filters.Document.ALL
                 | (filters.TEXT & ~filters.COMMAND)
             ),
-            handle_routed_message,
+            handle_text,
         )
     )
-
-    # Inline button callback handler
-    app.add_handler(CallbackQueryHandler(handle_callback))
 
     # Unauthorized access handler (catch-all for everyone else)
     app.add_handler(

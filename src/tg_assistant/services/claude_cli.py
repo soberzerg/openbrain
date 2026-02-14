@@ -17,6 +17,68 @@ class ClaudeCliError(Exception):
     """Raised when Claude CLI returns an error or fails to execute."""
 
 
+@dataclass(frozen=True)
+class PermissionProfile:
+    """Defines tool permissions for a Claude CLI session."""
+
+    name: str
+    allowed_tools: tuple[str, ...] | None = None
+    permission_mode: str | None = None
+    use_dangerous_skip: bool = False
+    append_system_prompt: str | None = None
+
+
+PERMISSION_PROFILES: dict[str, PermissionProfile] = {
+    "full": PermissionProfile(
+        name="full",
+        use_dangerous_skip=True,
+    ),
+    "safe": PermissionProfile(
+        name="safe",
+        permission_mode="acceptEdits",
+        allowed_tools=(
+            "Read",
+            "Grep",
+            "Glob",
+            "Edit",
+            "Write",
+            "Bash(ls:*)",
+            "Bash(cat:*)",
+            "Bash(head:*)",
+            "Bash(tail:*)",
+            "Bash(find:*)",
+            "Bash(git:log)",
+            "Bash(git:status)",
+            "Bash(git:diff)",
+            "Bash(git:show)",
+            "Bash(pwd:*)",
+            "Bash(echo:*)",
+        ),
+        append_system_prompt="You are in safe mode. Destructive commands are blocked.",
+    ),
+    "readonly": PermissionProfile(
+        name="readonly",
+        permission_mode="plan",
+        allowed_tools=(
+            "Read",
+            "Grep",
+            "Glob",
+            "Bash(ls:*)",
+            "Bash(cat:*)",
+            "Bash(head:*)",
+            "Bash(tail:*)",
+            "Bash(find:*)",
+            "Bash(git:log)",
+            "Bash(git:status)",
+            "Bash(git:diff)",
+            "Bash(git:show)",
+            "Bash(pwd:*)",
+        ),
+        append_system_prompt="You are in read-only mode. You cannot modify any files.",
+    ),
+}
+
+
 @dataclass
 class ClaudeResponse:
     """Parsed response from Claude Code CLI."""
@@ -38,6 +100,7 @@ class ClaudeCli:
         self.timeout = config.claude_timeout_seconds
         self.obsidian_path = config.obsidian_vault_path
         self.upload_dir = str(config.upload_dir.resolve())
+        self.profile = PERMISSION_PROFILES[config.claude_permission_profile]
 
     @staticmethod
     def generate_session_id() -> str:
@@ -53,9 +116,20 @@ class ClaudeCli:
         cmd = [
             self.cli_path,
             "-p",
-            "--output-format", "json",
-            "--dangerously-skip-permissions",
+            "--output-format",
+            "json",
         ]
+
+        # Apply permission profile
+        if self.profile.use_dangerous_skip:
+            cmd.append("--dangerously-skip-permissions")
+        else:
+            if self.profile.permission_mode:
+                cmd.extend(["--permission-mode", self.profile.permission_mode])
+            if self.profile.allowed_tools:
+                cmd.extend(["--allowedTools", " ".join(self.profile.allowed_tools)])
+            if self.profile.append_system_prompt:
+                cmd.extend(["--append-system-prompt", self.profile.append_system_prompt])
 
         if is_resume and session_id:
             cmd.extend(["-r", session_id])
@@ -113,9 +187,7 @@ class ClaudeCli:
             if process.returncode != 0:
                 error_text = stderr.decode().strip()
                 logger.error("Claude CLI error (code %d): %s", process.returncode, error_text)
-                raise ClaudeCliError(
-                    f"CLI exited with code {process.returncode}: {error_text}"
-                )
+                raise ClaudeCliError(f"CLI exited with code {process.returncode}: {error_text}")
 
             data = json.loads(stdout.decode())
 
@@ -142,11 +214,12 @@ class ClaudeCli:
 
         except asyncio.TimeoutError:
             logger.error("Claude CLI timed out after %ds", self.timeout)
-            if process:
-                process.kill()
-                await process.wait()
             raise
-
         except json.JSONDecodeError as e:
             logger.error("Failed to parse CLI output: %s", e)
             raise ClaudeCliError(f"Failed to parse CLI output: {e}") from e
+        finally:
+            # Ensure process cleanup in all error paths
+            if process and process.returncode is None:
+                process.kill()
+                await process.wait()
