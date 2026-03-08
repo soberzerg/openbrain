@@ -9,7 +9,7 @@ from tg_assistant.bot import BOT_COMMANDS, _setup_bot_commands
 
 def test_bot_commands_structure():
     """All commands have required fields."""
-    assert len(BOT_COMMANDS) == 8
+    assert len(BOT_COMMANDS) == 12
 
     for cmd_def in BOT_COMMANDS:
         assert cmd_def.command
@@ -28,7 +28,11 @@ def test_bot_commands_structure():
 def test_bot_commands_order():
     """Commands are in expected order."""
     commands = [cmd.command for cmd in BOT_COMMANDS]
-    expected = ["start", "help", "new", "status", "tasks", "inbox", "daily", "week"]
+    expected = [
+        "start", "help", "new", "status",
+        "agents", "agent", "agent_add", "agent_del",
+        "tasks", "inbox", "daily", "week",
+    ]
     assert commands == expected
 
 
@@ -52,7 +56,7 @@ async def test_setup_bot_commands_success():
     call_args = mock_bot.set_my_commands.call_args[0][0]
 
     # Verify BotCommand objects are passed
-    assert len(call_args) == 8
+    assert len(call_args) == 12
     assert all(hasattr(cmd, "command") for cmd in call_args)
     assert all(hasattr(cmd, "description") for cmd in call_args)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass
 
@@ -148,6 +149,7 @@ class ClaudeCli:
         prompt: str,
         session_id: str | None = None,
         is_resume: bool = False,
+        working_dir: str | None = None,
     ) -> ClaudeResponse:
         """
         Send a prompt to Claude Code CLI and return the parsed response.
@@ -156,6 +158,7 @@ class ClaudeCli:
             prompt: The text to send to Claude.
             session_id: UUID of session (for new or resumed sessions).
             is_resume: If True, uses --resume to continue existing session.
+            working_dir: Override working directory (for multi-agent support).
 
         Raises:
             ClaudeCliError: If the CLI returns an error or produces invalid output.
@@ -170,13 +173,16 @@ class ClaudeCli:
         )
 
         process: asyncio.subprocess.Process | None = None
+        # Remove API key so CLI uses OAuth (subscription) instead of API billing
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.working_dir,
+                cwd=working_dir or self.working_dir,
+                env=env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -185,9 +191,22 @@ class ClaudeCli:
             )
 
             if process.returncode != 0:
-                error_text = stderr.decode().strip()
-                logger.error("Claude CLI error (code %d): %s", process.returncode, error_text)
-                raise ClaudeCliError(f"CLI exited with code {process.returncode}: {error_text}")
+                stderr_text = stderr.decode().strip()
+                stdout_text = stdout.decode().strip()
+                # CLI often returns error details as JSON in stdout
+                error_msg = stderr_text
+                if not error_msg and stdout_text:
+                    try:
+                        err_data = json.loads(stdout_text)
+                        error_msg = err_data.get("result", stdout_text)
+                    except json.JSONDecodeError:
+                        error_msg = stdout_text
+                logger.error(
+                    "Claude CLI error (code %d): %s",
+                    process.returncode,
+                    error_msg[:500] if error_msg else "(no output)",
+                )
+                raise ClaudeCliError(error_msg or f"CLI exited with code {process.returncode}")
 
             data = json.loads(stdout.decode())
 

@@ -7,11 +7,15 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from tg_assistant.config import Config
 from tg_assistant.models.database import Database
 from tg_assistant.services.claude_cli import ClaudeCli, ClaudeResponse
 from tg_assistant.services.git_sync import GitSync
+
+if TYPE_CHECKING:
+    from tg_assistant.services.agent_manager import AgentManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +33,8 @@ class Session:
     message_count: int = 0
     total_cost: float = 0.0
     status: str = "active"
+    agent_id: int | None = None
+    agent_name: str = "main"
 
 
 @dataclass
@@ -58,11 +64,13 @@ class SessionManager:
         cli: ClaudeCli,
         db: Database,
         git_sync: GitSync | None = None,
+        agent_manager: AgentManager | None = None,
     ) -> None:
         self.config = config
         self.cli = cli
         self.db = db
         self.git_sync = git_sync
+        self.agent_manager = agent_manager
         self.timeout = timedelta(minutes=config.session_timeout_minutes)
         self._sessions: dict[int, Session] = {}
         self._locks: dict[int, asyncio.Lock] = {}
@@ -147,9 +155,24 @@ class SessionManager:
 
     # -- Send with session lifecycle ----------------------------------------
 
+    async def _resolve_agent(self, user_id: int) -> tuple[int | None, str, str | None]:
+        """Return (agent_id, agent_name, working_dir) for the user's active agent."""
+        if not self.agent_manager:
+            return None, "main", None
+        agent = await self.agent_manager.get_user_agent(user_id)
+        return agent["id"], agent["name"], agent["working_dir"]
+
     async def _do_send(self, user_id: int, text: str) -> ClaudeResponse:
         """Send to Claude CLI with session management. Caller must hold the lock."""
+        agent_id, agent_name, agent_working_dir = await self._resolve_agent(user_id)
         session = self.get_active_session(user_id)
+
+        # If active session belongs to a different agent, expire it
+        if session and session.agent_id != agent_id:
+            await self._do_expire(session)
+            self._sessions.pop(user_id, None)
+            session = None
+            logger.info("Session expired due to agent switch for user %d", user_id)
 
         if session:
             # Resume existing session
@@ -157,6 +180,7 @@ class SessionManager:
                 prompt=text,
                 session_id=session.session_id,
                 is_resume=True,
+                working_dir=agent_working_dir,
             )
             session.last_active = datetime.now()
             session.message_count += 1
@@ -183,6 +207,7 @@ class SessionManager:
                 prompt=text,
                 session_id=new_id,
                 is_resume=False,
+                working_dir=agent_working_dir,
             )
 
             session = Session(
@@ -192,16 +217,23 @@ class SessionManager:
                 last_active=datetime.now(),
                 message_count=1,
                 total_cost=response.cost_usd,
+                agent_id=agent_id,
+                agent_name=agent_name,
             )
             self._sessions[user_id] = session
 
-            await self.db.create_session(session.session_id, user_id)
+            await self.db.create_session(session.session_id, user_id, agent_id=agent_id)
             await self.db.update_session(
                 session.session_id,
                 message_count=session.message_count,
                 total_cost=session.total_cost,
             )
-            logger.info("New session %s for user %d", session.session_id[:8], user_id)
+            logger.info(
+                "New session %s for user %d (agent=%s)",
+                session.session_id[:8],
+                user_id,
+                agent_name,
+            )
 
         # Handle pending expiry (e.g. user sent /new while CLI was running)
         await self._apply_pending_expiry(user_id)

@@ -122,9 +122,12 @@ async def send_claude_response(
 
     except ClaudeCliError as e:
         logger.error("Claude CLI error for user %d: %s", user_id, e)
-        await update.effective_message.reply_text(
-            "Claude Code error. Please try again or use /new to start a fresh session."
-        )
+        error_msg = str(e)
+        if "credit balance" in error_msg.lower() or "billing" in error_msg.lower():
+            reply = "Claude usage limit reached. Please try again later."
+        else:
+            reply = "Claude Code error. Please try again or use /new to start a fresh session."
+        await update.effective_message.reply_text(reply)
 
     except asyncio.TimeoutError:
         await update.effective_message.reply_text(

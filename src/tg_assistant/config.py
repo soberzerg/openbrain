@@ -54,6 +54,7 @@ class Config:
     data_dir: Path = field(default_factory=lambda: Path("data"))
     upload_dir: Path = field(default_factory=lambda: Path("data/uploads"))
     db_path: Path = field(default_factory=lambda: Path("data/tg_assistant.db"))
+    agents_base_dir: Path = field(default_factory=lambda: Path("agents"))
 
     @classmethod
     def from_env(cls, env_path: str | None = None) -> Config:
@@ -86,6 +87,8 @@ class Config:
         upload_dir = data_dir / "uploads"
         db_path = data_dir / "tg_assistant.db"
 
+        agents_base_dir = Path(os.getenv("AGENTS_BASE_DIR", "agents"))
+
         config = cls(
             bot_token=bot_token,
             allowed_user_ids=allowed_user_ids,
@@ -110,6 +113,7 @@ class Config:
             data_dir=data_dir,
             upload_dir=upload_dir,
             db_path=db_path,
+            agents_base_dir=agents_base_dir,
         )
 
         # Validate permission profile
@@ -127,5 +131,6 @@ class Config:
         # Ensure runtime directories exist
         config.data_dir.mkdir(parents=True, exist_ok=True)
         config.upload_dir.mkdir(parents=True, exist_ok=True)
+        config.agents_base_dir.mkdir(parents=True, exist_ok=True)
 
         return config
