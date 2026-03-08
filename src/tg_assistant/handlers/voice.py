@@ -9,7 +9,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from tg_assistant.config import Config
-from tg_assistant.handlers._helpers import send_claude_response
+from tg_assistant.handlers._helpers import resolve_agent, send_claude_response
 from tg_assistant.models.database import Database
 from tg_assistant.services.rate_limiter import RateLimiter
 from tg_assistant.services.transcription import TranscriptionError, TranscriptionService
@@ -80,6 +80,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
     # Send transcription to Claude
+    agent = await resolve_agent(context, user_id)
     prompt = f"[Voice transcription]: {text}"
     await send_claude_response(
         update,
@@ -89,6 +90,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         msg_type="voice",
         log_input=False,
         file_path=str(filepath),
+        agent=agent,
     )
 
 
@@ -148,6 +150,7 @@ async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         file_path=str(filepath),
     )
 
+    agent = await resolve_agent(context, user_id)
     prompt = f"[Voice transcription]: {text}"
     await send_claude_response(
         update,
@@ -157,4 +160,5 @@ async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         msg_type="voice",
         log_input=False,
         file_path=str(filepath),
+        agent=agent,
     )

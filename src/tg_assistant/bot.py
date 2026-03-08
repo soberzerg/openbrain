@@ -150,7 +150,7 @@ async def post_init(application: Application) -> None:
     agent_mgr = AgentManager(db, config)
     await agent_mgr.initialize()
 
-    session_mgr = SessionManager(config, cli, db, git_sync, agent_manager=agent_mgr)
+    session_mgr = SessionManager(config, cli, db, git_sync)
     rate_limiter = RateLimiter(config.rate_limit_per_minute)
 
     # Transcription service (optional — requires API key)

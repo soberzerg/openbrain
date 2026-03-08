@@ -9,6 +9,7 @@ import pytest
 
 from tg_assistant.services.claude_cli import ClaudeResponse
 from tg_assistant.services.session_manager import (
+    DEFAULT_AGENT,
     MAX_QUEUE_SIZE,
     QueueFullError,
     SessionManager,
@@ -65,7 +66,7 @@ class TestSessionManager:
         await session_mgr.send_message(111, "Hello")
 
         # Manually expire the session
-        session = session_mgr._sessions[111]
+        session = session_mgr._sessions[(111, DEFAULT_AGENT.agent_id)]
         session.last_active = datetime.now() - timedelta(minutes=5)
 
         mock_cli.generate_session_id.return_value = "new-session-id"
@@ -234,7 +235,7 @@ class TestMessageQueue:
         async def on_response(resp: ClaudeResponse, from_queue: bool) -> None:
             results.append((resp.text, from_queue))
 
-        await session_mgr.send_message_with_queue(111, "main", on_response)
+        await session_mgr.send_message_with_queue(111, "main", on_response=on_response)
 
         assert len(results) == 2
         assert results[0] == ("Response 1", False)
@@ -248,7 +249,7 @@ class TestMessageQueue:
         async def on_response(resp: ClaudeResponse, from_queue: bool) -> None:
             results.append((resp.text, from_queue))
 
-        await session_mgr.send_message_with_queue(111, "only one", on_response)
+        await session_mgr.send_message_with_queue(111, "only one", on_response=on_response)
 
         assert len(results) == 1
         assert results[0] == ("Hello from Claude!", False)
@@ -264,7 +265,7 @@ class TestMessageQueue:
                 # Simulate /new arriving while send_message_with_queue is draining.
                 session_mgr.mark_for_expiry(111)
 
-        await session_mgr.send_message_with_queue(111, "main", on_response)
+        await session_mgr.send_message_with_queue(111, "main", on_response=on_response)
 
         assert session_mgr.get_active_session(111) is None
-        assert 111 not in session_mgr._pending_expiry
+        assert (111, DEFAULT_AGENT.agent_id) not in session_mgr._pending_expiry

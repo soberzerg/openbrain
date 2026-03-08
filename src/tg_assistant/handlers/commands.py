@@ -9,7 +9,7 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from tg_assistant.handlers._helpers import send_claude_response
+from tg_assistant.handlers._helpers import resolve_agent, send_claude_response
 from tg_assistant.models.database import Database
 from tg_assistant.services.agent_manager import AgentError, AgentManager
 from tg_assistant.services.session_manager import SessionManager
@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 HELP_TEXT = (
     "Отправьте любое сообщение, и я обработаю его через Claude Code.\n\n"
     "<b>Команды:</b>\n"
-    "/new — Начать новую сессию (очистить контекст)\n"
+    "/new — Сбросить сессию текущего агента\n"
+    "/new all — Сбросить все сессии\n"
     "/status — Информация о текущей сессии\n"
     "/agents — Список агентов\n"
     "/agent &lt;name&gt; — Переключить агента\n"
@@ -67,22 +68,37 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_new_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Force-expire current session and start fresh."""
+    """Force-expire session(s): /new (current agent) or /new all."""
     assert update.effective_message and update.effective_user
     session_mgr: SessionManager = context.bot_data["session_manager"]
     user_id = update.effective_user.id
 
-    if session_mgr.is_busy(user_id):
-        session_mgr.mark_for_expiry(user_id)
+    expire_all = context.args and context.args[0].lower() == "all"
+
+    if expire_all:
+        count = await session_mgr.expire_all_sessions(user_id)
         await update.effective_message.reply_text(
-            "Claude is still processing. Queued messages cleared.\n"
+            f"All sessions reset ({count} expired). Next message starts fresh."
+        )
+        return
+
+    # Expire only the current agent's session
+    agent = await resolve_agent(context, user_id)
+    key = (user_id, agent.agent_id)
+
+    if session_mgr.is_busy(key):
+        session_mgr.mark_for_expiry(key)
+        await update.effective_message.reply_text(
+            f"Agent '{agent.agent_name}' is still processing. "
+            "Queued messages cleared.\n"
             "Session will reset after the current task finishes."
         )
         return
 
-    await session_mgr.expire_session(user_id)
+    await session_mgr.expire_session(user_id, agent_id=agent.agent_id)
     await update.effective_message.reply_text(
-        "Session reset. Next message starts a new conversation."
+        f"Session for '{agent.agent_name}' reset. "
+        "Next message starts a new conversation."
     )
 
 
@@ -94,7 +110,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     user_id = update.effective_user.id
 
     agent_mgr: AgentManager | None = context.bot_data.get("agent_manager")
-    session = session_mgr.get_active_session(user_id)
+    sessions = session_mgr.get_all_user_sessions(user_id)
     stats = await db.get_user_stats(user_id)
 
     lines: list[str] = []
@@ -102,26 +118,23 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     # Show active agent
     if agent_mgr:
         agent = await agent_mgr.get_user_agent(user_id)
-        wd = html.escape(agent["working_dir"])
-        lines.append(f"<b>Agent:</b> {agent['name']} ({wd})")
+        wd = html.escape(agent["working_dir"] or "")
+        lines.append(f"<b>Active agent:</b> {agent['name']} ({wd})")
         lines.append("")
 
-    if session:
-        elapsed = datetime.now() - session.last_active
-        minutes = int(elapsed.total_seconds() // 60)
-        lines.append(f"<b>Active session:</b> {session.session_id[:8]}...")
-        lines.append(f"Last activity: {minutes}m ago")
-        lines.append(f"Messages in session: {session.message_count}")
-        lines.append(f"Session cost: ${session.total_cost:.4f}")
+    if sessions:
+        lines.append(f"<b>Active sessions:</b> {len(sessions)}")
+        for session in sessions:
+            elapsed = datetime.now() - session.last_active
+            minutes = int(elapsed.total_seconds() // 60)
+            lines.append(
+                f"  <b>{session.agent_name}</b>: "
+                f"{session.session_id[:8]}... "
+                f"({session.message_count} msgs, "
+                f"${session.total_cost:.4f}, {minutes}m ago)"
+            )
     else:
-        lines.append("No active session. Send a message to start one.")
-
-    if session_mgr.is_busy(user_id):
-        lines.append("")
-        lines.append("\u23f3 Claude is processing a request...")
-        queue_size = session_mgr.get_queue_size(user_id)
-        if queue_size > 0:
-            lines.append(f"Queued messages: {queue_size}")
+        lines.append("No active sessions. Send a message to start one.")
 
     lines.append("")
     lines.append("<b>Total stats:</b>")
@@ -132,34 +145,36 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
+async def _shortcut_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, key: str
+) -> None:
+    """Send a pre-built prompt to the current agent."""
+    assert update.effective_user
+    user_id = update.effective_user.id
+    agent = await resolve_agent(context, user_id)
+    await send_claude_response(
+        update, context, user_id, _SHORTCUT_PROMPTS[key], agent=agent
+    )
+
+
 async def cmd_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show today's tasks from YouGile."""
-    assert update.effective_user
-    await send_claude_response(
-        update, context, update.effective_user.id, _SHORTCUT_PROMPTS["tasks"]
-    )
+    await _shortcut_command(update, context, "tasks")
 
 
 async def cmd_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show Obsidian inbox items."""
-    assert update.effective_user
-    await send_claude_response(
-        update, context, update.effective_user.id, _SHORTCUT_PROMPTS["inbox"]
-    )
+    await _shortcut_command(update, context, "inbox")
 
 
 async def cmd_daily(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Run daily review."""
-    assert update.effective_user
-    await send_claude_response(
-        update, context, update.effective_user.id, _SHORTCUT_PROMPTS["daily"]
-    )
+    await _shortcut_command(update, context, "daily")
 
 
 async def cmd_week(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Generate weekly summary."""
-    assert update.effective_user
-    await send_claude_response(update, context, update.effective_user.id, _SHORTCUT_PROMPTS["week"])
+    await _shortcut_command(update, context, "week")
 
 
 # -- Agent commands --------------------------------------------------------
@@ -179,7 +194,7 @@ async def cmd_agents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         marker = "* " if agent["id"] == active["id"] else "  "
         default_tag = " (default)" if agent["is_default"] else ""
         desc = f" — {html.escape(agent['description'])}" if agent["description"] else ""
-        wd = html.escape(agent["working_dir"])
+        wd = html.escape(agent["working_dir"] or "")
         lines.append(f"{marker}<b>{agent['name']}</b>{default_tag}{desc}")
         lines.append(f"    {wd}")
 
@@ -199,7 +214,6 @@ async def cmd_agent_switch(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     agent_mgr: AgentManager = context.bot_data["agent_manager"]
-    session_mgr: SessionManager = context.bot_data["session_manager"]
     agent_name = context.args[0]
 
     try:
@@ -208,15 +222,10 @@ async def cmd_agent_switch(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.effective_message.reply_text(str(e))
         return
 
-    # Expire current session (new one will be created on next message)
-    if session_mgr.is_busy(user_id):
-        session_mgr.mark_for_expiry(user_id)
-    else:
-        await session_mgr.expire_session(user_id)
-
-    wd = html.escape(agent["working_dir"])
+    wd = html.escape(agent["working_dir"] or "")
     await update.effective_message.reply_text(
-        f"Switched to agent <b>{agent['name']}</b>\n{wd}",
+        f"Switched to agent <b>{agent['name']}</b>\n{wd}\n"
+        "Next message will go to this agent. Existing sessions are preserved.",
         parse_mode="HTML",
     )
 
@@ -248,7 +257,7 @@ async def cmd_agent_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.effective_message.reply_text(str(e))
         return
 
-    wd = html.escape(agent["working_dir"])
+    wd = html.escape(agent["working_dir"] or "")
     await update.effective_message.reply_text(
         f"Agent <b>{agent['name']}</b> created\n{wd}",
         parse_mode="HTML",
