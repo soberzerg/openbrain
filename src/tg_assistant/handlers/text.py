@@ -7,7 +7,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from tg_assistant.handlers._helpers import send_claude_response
+from tg_assistant.handlers._helpers import resolve_agent, send_claude_response
 from tg_assistant.models.database import Database
 from tg_assistant.services.rate_limiter import RateLimiter
 
@@ -67,4 +67,5 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         parts.append(text)
         text = "\n".join(parts)
 
-    await send_claude_response(update, context, user_id, text, msg_type="text")
+    agent = await resolve_agent(context, user_id)
+    await send_claude_response(update, context, user_id, text, msg_type="text", agent=agent)

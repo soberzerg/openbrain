@@ -19,9 +19,12 @@ from telegram.ext import (
 from tg_assistant.config import Config
 from tg_assistant.handlers.auth import handle_unauthorized
 from tg_assistant.handlers.commands import (
+    cmd_agent_add,
+    cmd_agent_del,
+    cmd_agent_switch,
+    cmd_agents,
     cmd_daily,
     cmd_help,
-    cmd_inbox,
     cmd_new_session,
     cmd_start,
     cmd_status,
@@ -32,8 +35,8 @@ from tg_assistant.handlers.errors import error_handler
 from tg_assistant.handlers.text import handle_text
 from tg_assistant.handlers.voice import handle_video_note, handle_voice
 from tg_assistant.models.database import Database
+from tg_assistant.services.agent_manager import AgentManager
 from tg_assistant.services.claude_cli import ClaudeCli
-from tg_assistant.services.git_sync import GitSync
 from tg_assistant.services.rate_limiter import RateLimiter
 from tg_assistant.services.scheduler import setup_jobs
 from tg_assistant.services.session_manager import SessionManager
@@ -79,16 +82,34 @@ BOT_COMMANDS = [
         help_text="Информация о текущей сессии",
     ),
     BotCommandDef(
+        command="agents",
+        description="Список агентов",
+        handler=cmd_agents,
+        help_text="Показать всех агентов",
+    ),
+    BotCommandDef(
+        command="agent",
+        description="Переключить агента",
+        handler=cmd_agent_switch,
+        help_text="Переключить активного агента",
+    ),
+    BotCommandDef(
+        command="agent_add",
+        description="Добавить агента",
+        handler=cmd_agent_add,
+        help_text="Добавить нового агента",
+    ),
+    BotCommandDef(
+        command="agent_del",
+        description="Удалить агента",
+        handler=cmd_agent_del,
+        help_text="Удалить агента",
+    ),
+    BotCommandDef(
         command="tasks",
         description="Задачи на сегодня",
         handler=cmd_tasks,
         help_text="Задачи на сегодня из YouGile",
-    ),
-    BotCommandDef(
-        command="inbox",
-        description="Непрочитанные заметки",
-        handler=cmd_inbox,
-        help_text="Список элементов из Obsidian inbox",
     ),
     BotCommandDef(
         command="daily",
@@ -113,12 +134,10 @@ async def post_init(application: Application) -> None:
 
     cli = ClaudeCli(config)
 
-    git_sync = None
-    if config.obsidian_vault_path and config.git_auto_sync:
-        git_sync = GitSync(config.obsidian_vault_path)
-        logger.info("Git sync enabled for %s", config.obsidian_vault_path)
+    agent_mgr = AgentManager(db, config)
+    await agent_mgr.initialize()
 
-    session_mgr = SessionManager(config, cli, db, git_sync)
+    session_mgr = SessionManager(config, cli, db)
     rate_limiter = RateLimiter(config.rate_limit_per_minute)
 
     # Transcription service (optional — requires API key)
@@ -134,6 +153,7 @@ async def post_init(application: Application) -> None:
         logger.info("Transcription disabled (no OPENAI_API_KEY)")
 
     application.bot_data["db"] = db
+    application.bot_data["agent_manager"] = agent_mgr
     application.bot_data["session_manager"] = session_mgr
     application.bot_data["rate_limiter"] = rate_limiter
     application.bot_data["transcription"] = transcription
