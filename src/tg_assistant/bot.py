@@ -25,7 +25,6 @@ from tg_assistant.handlers.commands import (
     cmd_agents,
     cmd_daily,
     cmd_help,
-    cmd_inbox,
     cmd_new_session,
     cmd_start,
     cmd_status,
@@ -38,7 +37,6 @@ from tg_assistant.handlers.voice import handle_video_note, handle_voice
 from tg_assistant.models.database import Database
 from tg_assistant.services.agent_manager import AgentManager
 from tg_assistant.services.claude_cli import ClaudeCli
-from tg_assistant.services.git_sync import GitSync
 from tg_assistant.services.rate_limiter import RateLimiter
 from tg_assistant.services.scheduler import setup_jobs
 from tg_assistant.services.session_manager import SessionManager
@@ -114,12 +112,6 @@ BOT_COMMANDS = [
         help_text="Задачи на сегодня из YouGile",
     ),
     BotCommandDef(
-        command="inbox",
-        description="Непрочитанные заметки",
-        handler=cmd_inbox,
-        help_text="Список элементов из Obsidian inbox",
-    ),
-    BotCommandDef(
         command="daily",
         description="Ежедневный обзор",
         handler=cmd_daily,
@@ -142,15 +134,10 @@ async def post_init(application: Application) -> None:
 
     cli = ClaudeCli(config)
 
-    git_sync = None
-    if config.obsidian_vault_path and config.git_auto_sync:
-        git_sync = GitSync(config.obsidian_vault_path)
-        logger.info("Git sync enabled for %s", config.obsidian_vault_path)
-
     agent_mgr = AgentManager(db, config)
     await agent_mgr.initialize()
 
-    session_mgr = SessionManager(config, cli, db, git_sync)
+    session_mgr = SessionManager(config, cli, db)
     rate_limiter = RateLimiter(config.rate_limit_per_minute)
 
     # Transcription service (optional — requires API key)

@@ -18,7 +18,7 @@ from tg_assistant.services.session_manager import (
 
 @pytest.fixture
 def session_mgr(config, db, mock_cli):
-    return SessionManager(config, mock_cli, db, git_sync=None)
+    return SessionManager(config, mock_cli, db)
 
 
 class TestSessionManager:

@@ -21,7 +21,7 @@ AGENT_B = AgentContext(agent_id=2, agent_name="beta", working_dir="/tmp/beta")
 
 @pytest.fixture
 def session_mgr(config, db, mock_cli):
-    return SessionManager(config, mock_cli, db, git_sync=None)
+    return SessionManager(config, mock_cli, db)
 
 
 class TestParallelSessions:

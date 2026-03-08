@@ -99,7 +99,6 @@ class ClaudeCli:
         self.cli_path = config.claude_cli_path
         self.working_dir = config.claude_working_dir
         self.timeout = config.claude_timeout_seconds
-        self.obsidian_path = config.obsidian_vault_path
         self.upload_dir = str(config.upload_dir.resolve())
         self.profile = PERMISSION_PROFILES[config.claude_permission_profile]
 
@@ -138,8 +137,6 @@ class ClaudeCli:
             cmd.extend(["--session-id", session_id])
 
         # Add additional directories for Claude to access
-        if self.obsidian_path:
-            cmd.extend(["--add-dir", self.obsidian_path])
         cmd.extend(["--add-dir", self.upload_dir])
 
         return cmd

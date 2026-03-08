@@ -27,11 +27,6 @@ class Config:
     # Sessions
     session_timeout_minutes: int = 30
 
-    # Obsidian / Git
-    obsidian_vault_path: str = ""
-    obsidian_inbox_subdir: str = "00_Inbox"
-    git_auto_sync: bool = True
-
     # Rate limiting
     rate_limit_per_minute: int = 10
 
@@ -54,7 +49,7 @@ class Config:
     data_dir: Path = field(default_factory=lambda: Path("data"))
     upload_dir: Path = field(default_factory=lambda: Path("data/uploads"))
     db_path: Path = field(default_factory=lambda: Path("data/tg_assistant.db"))
-    agents_base_dir: Path = field(default_factory=lambda: Path("agents"))
+    agents_base_dir: Path = field(default_factory=lambda: Path("agents"))  # resolved in from_env
 
     @classmethod
     def from_env(cls, env_path: str | None = None) -> Config:
@@ -87,7 +82,8 @@ class Config:
         upload_dir = data_dir / "uploads"
         db_path = data_dir / "tg_assistant.db"
 
-        agents_base_dir = Path(os.getenv("AGENTS_BASE_DIR", "agents"))
+        default_agents_dir = str(Path(claude_working_dir) / "agents")
+        agents_base_dir = Path(os.getenv("AGENTS_BASE_DIR", default_agents_dir))
 
         config = cls(
             bot_token=bot_token,
@@ -97,9 +93,6 @@ class Config:
             claude_timeout_seconds=int(os.getenv("CLAUDE_TIMEOUT_SECONDS", "120")),
             claude_permission_profile=os.getenv("CLAUDE_PERMISSION_PROFILE", "full"),
             session_timeout_minutes=int(os.getenv("SESSION_TIMEOUT_MINUTES", "30")),
-            obsidian_vault_path=os.getenv("OBSIDIAN_VAULT_PATH", ""),
-            obsidian_inbox_subdir=os.getenv("OBSIDIAN_INBOX_SUBDIR", "00_Inbox"),
-            git_auto_sync=os.getenv("GIT_AUTO_SYNC", "true").lower() == "true",
             rate_limit_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "10")),
             openai_api_key=os.getenv("OPENAI_API_KEY", ""),
             whisper_model=os.getenv("WHISPER_MODEL", "whisper-1"),

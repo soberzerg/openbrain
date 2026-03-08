@@ -15,7 +15,7 @@ from tg_assistant.services.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
-MORNING_DIGEST_PROMPT = "Run my daily review: today's tasks, inbox items, priorities. Brief."
+MORNING_DIGEST_PROMPT = "Run my daily review: today's tasks, priorities. Brief."
 
 WEEKLY_SUMMARY_PROMPT = (
     "Generate a weekly summary: completed tasks, key notes added, upcoming deadlines."

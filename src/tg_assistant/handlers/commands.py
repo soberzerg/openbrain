@@ -1,4 +1,4 @@
-"""Bot command handlers: /start, /help, /new, /status, /tasks, /inbox, /daily, /week."""
+"""Bot command handlers: /start, /help, /new, /status, /tasks, /daily, /week."""
 
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ HELP_TEXT = (
     "/agent_add &lt;name&gt; [path] [description] — Добавить агента\n"
     "/agent_del &lt;name&gt; — Удалить агента\n"
     "/tasks — Задачи на сегодня из YouGile\n"
-    "/inbox — Список элементов из Obsidian inbox\n"
     "/daily — Запустить ежедневный обзор\n"
     "/week — Сводка за неделю\n"
     "/help — Показать это сообщение"
@@ -36,8 +35,7 @@ HELP_TEXT = (
 # Pre-built prompts for shortcut commands
 _SHORTCUT_PROMPTS = {
     "tasks": "Show my tasks for today from YouGile. Brief format.",
-    "inbox": "Show what's in my Obsidian inbox. List recent unprocessed items.",
-    "daily": "Run my daily review: today's tasks, inbox items, priorities. Brief.",
+    "daily": "Run my daily review: today's tasks, priorities. Brief.",
     "week": "Generate a weekly summary: completed tasks, key notes added, upcoming deadlines.",
 }
 
@@ -160,11 +158,6 @@ async def _shortcut_command(
 async def cmd_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show today's tasks from YouGile."""
     await _shortcut_command(update, context, "tasks")
-
-
-async def cmd_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show Obsidian inbox items."""
-    await _shortcut_command(update, context, "inbox")
 
 
 async def cmd_daily(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from tg_assistant.config import Config
 from tg_assistant.models.database import Database
 from tg_assistant.services.claude_cli import ClaudeCli, ClaudeResponse
-from tg_assistant.services.git_sync import GitSync
 
 logger = logging.getLogger(__name__)
 
@@ -74,20 +73,16 @@ class SessionManager:
         config: Config,
         cli: ClaudeCli,
         db: Database,
-        git_sync: GitSync | None = None,
     ) -> None:
         self.config = config
         self.cli = cli
         self.db = db
-        self.git_sync = git_sync
         self.timeout = timedelta(minutes=config.session_timeout_minutes)
         self._sessions: dict[SessionKey, Session] = {}
         self._locks: dict[SessionKey, asyncio.Lock] = {}
         self._queues: dict[SessionKey, list[QueuedMessage]] = {}
         self._pending_expiry: set[SessionKey] = set()
         self._draining: set[SessionKey] = set()
-        # Lock for git operations (shared across all agents)
-        self._git_lock = asyncio.Lock()
 
     def _get_lock(self, key: SessionKey) -> asyncio.Lock:
         """Get or create a per-(user, agent) lock."""
@@ -243,11 +238,6 @@ class SessionManager:
             old = self._sessions.pop(key, None)
             if old:
                 await self._do_expire(old)
-
-            # Git pull before new session (serialized across all agents)
-            if self.git_sync:
-                async with self._git_lock:
-                    await self.git_sync.pull()
 
             # Create new session
             new_id = self.cli.generate_session_id()
@@ -406,10 +396,6 @@ class SessionManager:
         return count
 
     async def _do_expire(self, session: Session) -> None:
-        """Internal: mark session as expired and trigger git push."""
+        """Internal: mark session as expired in the database."""
         session.status = "expired"
         await self.db.update_session(session.session_id, status="expired")
-
-        if self.git_sync:
-            async with self._git_lock:
-                await self.git_sync.push_if_changed()
